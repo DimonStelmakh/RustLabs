@@ -5,6 +5,28 @@ pub fn run_calculator() {
 
     println!("\nЛаскаво просимо до калькулятора!\nОкрім виразів, можна написати 'exit' для виходу \
         або скористатися словом 'mem' замість числа, щоб взяти результат попереднього обчислення\n");
+
+    println!("Виберіть режим введення: ");
+    println!("1 - Звичайний");
+    println!("2 - Польський реверсний (ПОЛІЗ / RPN)");
+
+    let mut mode = String::new();
+
+    loop {
+        mode.clear();
+
+        io::stdin().read_line(&mut mode).expect("Не вдалося зчитати введення");
+
+        let mode = mode.trim();
+
+        if !matches!(mode, "1" | "2") {
+            println!("Немає такої опції! Напишіть 1 або 2")
+        }
+        else {
+            break;
+        }
+    }
+
     loop {
         println!("Введіть вираз:");
 
@@ -17,8 +39,14 @@ pub fn run_calculator() {
             break;
         }
 
+        let result = if mode.contains("1") {
+            evaluate_expression(&input, &memory)
+        } else {
+            evaluate_rpn_expression(&input, &memory)
+        };
+
         // пробуємо обчислити
-        match evaluate_expression(&input, &memory) {
+        match result {
             Ok(result) => {
                 println!("Результат: {}", result);
                 memory = Some(result);  // зберігаємо в пам'ять
@@ -83,6 +111,51 @@ fn evaluate_expression(input: &str, memory: &Option<f64>) -> Result<f64, &'stati
     output.pop().ok_or("Невірний формат виразу")
 
 
+}
+
+fn evaluate_rpn_expression(input: &str, memory: &Option<f64>) -> Result<f64, &'static str> {
+    let mut stack: Vec<f64> = Vec::new();
+
+    for token in input.split_whitespace() {
+        match token {
+            "+" => {
+                let b = stack.pop().ok_or("Недостатньо значень у стеці")?;
+                let a = stack.pop().ok_or("Недостатньо значень у стеці")?;
+                stack.push(a + b);
+            },
+            "-" => {
+                let b = stack.pop().ok_or("Недостатньо значень у стеці")?;
+                let a = stack.pop().ok_or("Недостатньо значень у стеці")?;
+                stack.push(a - b);
+            },
+            "*" => {
+                let b = stack.pop().ok_or("Недостатньо значень у стеці")?;
+                let a = stack.pop().ok_or("Недостатньо значень у стеці")?;
+                stack.push(a * b);
+            },
+            "/" => {
+                let b = stack.pop().ok_or("Недостатньо значень у стеці")?;
+                let a = stack.pop().ok_or("Недостатньо значень у стеці")?;
+                if b == 0.0 {
+                    return Err("Ділення на нуль не допускається");
+                }
+                stack.push(a / b);
+            },
+            "mem" => {
+                let number = match memory {
+                    Some(value) => *value,
+                    None => return Err("Пам'ять порожня"),
+                };
+                stack.push(number);
+            },
+            _ => {
+                let number = token.parse::<f64>().expect("Невірний формат числа");
+                stack.push(number);
+            },
+        }
+    }
+
+    stack.pop().ok_or("Вираз не обчислено")
 }
 
 fn is_operator(token: &str) -> bool {
