@@ -64,11 +64,6 @@ fn evaluate_expression(input: &str, memory: &Option<f64>) -> Result<f64, &'stati
     let mut output: Vec<f64> = Vec::new();
     let mut operators: Vec<&str> = Vec::new();
 
-    // if tokens.len() != 3 {
-    //     return Err("Невірний формат. Використовуйте: число оператор число (наприклад, 3 + 2 або mem + 2). \
-    //     Пробіли мають значення");
-    // }
-
     // обробляємо токени
     for token in tokens {
         match token {
