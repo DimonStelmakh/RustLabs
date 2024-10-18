@@ -90,7 +90,7 @@ fn evaluate_expression(input: &str, memory: &Option<f64>) -> Result<f64, &'stati
                 operators.push(op);
             }
             number => {
-                let parsed_number: f64 = number.parse::<f64>().expect("Невірний формат числа");
+                let parsed_number: f64 = number.parse::<f64>().map_err(|_| "Невірний формат числа")?;
                 output.push(parsed_number);
             }
         }
@@ -144,7 +144,7 @@ fn evaluate_rpn_expression(input: &str, memory: &Option<f64>) -> Result<f64, &'s
                 stack.push(number);
             },
             _ => {
-                let number = token.parse::<f64>().expect("Невірний формат числа");
+                let number = token.parse::<f64>().map_err(|_| "Невірний формат числа")?;
                 stack.push(number);
             },
         }
