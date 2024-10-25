@@ -39,13 +39,14 @@ pub fn run_calculator() {
             break;
         }
 
+        // пробуємо обчислити
         let result = if mode.contains("1") {
             evaluate_expression(&input, &memory)
         } else {
             evaluate_rpn_expression(&input, &memory)
         };
 
-        // пробуємо обчислити
+        // виводимо результат
         match result {
             Ok(result) => {
                 println!("Результат: {}", result);
