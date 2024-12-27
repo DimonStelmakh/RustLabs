@@ -60,6 +60,15 @@
             color: #666;
             font-size: 0.9em;
         }
+        .user-select {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            box-sizing: border-box;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+        }
+
     </style>
 </head>
 <body>
@@ -96,7 +105,9 @@
     "></div>
 
     <div id="messageForm">
-        <input type="text" id="receiverId" placeholder="Receiver UUID">
+        <select id="receiverId" class="user-select">
+            <option value="">Select user to message...</option>
+        </select>
         <input type="text" id="messageContent" placeholder="Type your message...">
         <button onclick="sendMessage()">Send</button>
     </div>
@@ -213,8 +224,13 @@
         const content = document.getElementById('messageContent').value;
         const receiverId = document.getElementById('receiverId').value;
 
-        if (!content || !receiverId) {
-            alert('Please enter both message and receiver ID');
+        if (!content) {
+            alert('Please enter a message');
+            return;
+        }
+
+        if (!receiverId) {
+            alert('Please select a user to message');
             return;
         }
 
@@ -257,8 +273,29 @@
             }
             const userList = await response.json();
             console.log('Loaded users:', userList);
-            users.clear(); // Clear existing users
+
+            // Update users map
+            users.clear();
             userList.forEach(user => users.set(user.id, user));
+
+            // Update dropdown
+            const select = document.getElementById('receiverId');
+            const currentValue = select.value; // Store current selection
+            select.innerHTML = '<option value="">Select user to message...</option>';
+
+            userList
+                .filter(user => user.id !== currentUserId) // Don't show current user
+                .sort((a, b) => a.username.localeCompare(b.username)) // Sort alphabetically
+                .forEach(user => {
+                    const option = document.createElement('option');
+                    option.value = user.id;
+                    option.textContent = user.username;
+                    if (user.id === currentValue) {
+                        option.selected = true;
+                    }
+                    select.appendChild(option);
+                });
+
             console.log('Updated users map:', Array.from(users.entries()));
         } catch (error) {
             console.error('Failed to load users:', error);
