@@ -1,4 +1,3 @@
-// Only declare each module once with pub
 pub mod models;
 pub mod auth;
 pub mod websocket;
@@ -6,9 +5,6 @@ pub mod storage;
 pub mod handlers;
 pub mod ui;
 
-use tokio;
-use serde::{Serialize, Deserialize};
-use warp;
 use sqlx;
 
 use crate::realtime_messenger::auth::AuthError;

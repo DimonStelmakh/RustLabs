@@ -19,7 +19,7 @@ pub enum WebSocketCommand {
     SendMessage {
         content: String,
         receiver_id: Uuid,
-        content_type: MessageType,  // Add this field
+        content_type: MessageType,
     },
     MarkAsRead {
         message_ids: Vec<Uuid>,
@@ -135,7 +135,7 @@ impl WebSocketHandler {
     async fn send_to_user(&self, user_id: Uuid, event: &WebSocketEvent) {
         if let Some(sender) = self.users.read().await.get(&user_id) {
             let event_json = serde_json::to_string(&event).unwrap();
-            println!("Sending WebSocket message to {}: {}", user_id, event_json); // Debug log
+            println!("Sending WebSocket message to {}: {}", user_id, event_json);
             let _ = sender.send(Ok(WsMessage::text(event_json)));
         } else {
             println!("User {} not connected to WebSocket", user_id);

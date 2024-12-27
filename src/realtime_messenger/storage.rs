@@ -1,6 +1,6 @@
 use chrono::DateTime;
 use chrono::Utc;
-use super::models::{Message, MessageType, User};
+use super::models::{Message, User};
 use sqlx::PgPool;
 use uuid::Uuid;
 use std::path::PathBuf;
@@ -30,7 +30,6 @@ pub struct DbMessage {
 
 impl Storage {
     pub fn new(db_pool: PgPool, file_storage_path: PathBuf) -> Self {
-        // Ensure the base storage directory exists
         if let Err(e) = std::fs::create_dir_all(&file_storage_path) {
             println!("Warning: Could not create storage directory at {:?}: {}", file_storage_path, e);
         }
@@ -134,57 +133,6 @@ impl Storage {
         Ok(users)
     }
 
-    pub async fn get_conversation_messages(
-        &self,
-        user_id: Uuid,
-        other_user_id: Uuid,
-        limit: i64,
-        offset: i64,
-    ) -> Result<Vec<Message>, StorageError> {
-        let db_messages = sqlx::query!(
-        r#"
-        SELECT
-            id as "id!",
-            sender_id as "sender_id!",
-            receiver_id as "receiver_id!",
-            content,
-            content_type as "content_type!: serde_json::Value",
-            created_at as "created_at!",
-            read_at
-        FROM messages
-        WHERE (sender_id = $1 AND receiver_id = $2)
-           OR (sender_id = $2 AND receiver_id = $1)
-        ORDER BY created_at DESC
-        LIMIT $3 OFFSET $4
-        "#,
-        user_id,
-        other_user_id,
-        limit,
-        offset,
-    )
-            .fetch_all(&self.db_pool)
-            .await
-            .map_err(StorageError::Database)?;
-
-        let messages = db_messages
-            .into_iter()
-            .filter_map(|row| {
-                let content_type = serde_json::from_value(row.content_type).ok()?;
-                Some(Message {
-                    id: row.id,
-                    sender_id: row.sender_id,
-                    receiver_id: row.receiver_id,
-                    content: row.content,
-                    content_type,
-                    created_at: row.created_at,
-                    read_at: row.read_at,
-                })
-            })
-            .collect();
-
-        Ok(messages)
-    }
-
     pub async fn save_file(
         &self,
         user_id: Uuid,
@@ -194,7 +142,6 @@ impl Storage {
         let user_dir = self.file_storage_path.join(user_id.to_string());
         println!("Creating user directory at: {:?}", user_dir);
 
-        // Create user directory
         tokio::fs::create_dir_all(&user_dir).await.map_err(|e| {
             println!("Failed to create user directory: {}", e);
             StorageError::FileSystem(e)
@@ -203,7 +150,6 @@ impl Storage {
         let file_path = user_dir.join(&filename);
         println!("Writing file to: {:?}", file_path);
 
-        // Write file using tokio's async file operations
         tokio::fs::write(&file_path, data).await.map_err(|e| {
             println!("Failed to write file: {}", e);
             StorageError::FileSystem(e)
@@ -213,15 +159,12 @@ impl Storage {
         Ok(file_path)
     }
 
-    // Add this method to get base storage path
     pub fn get_base_path(&self) -> PathBuf {
         self.file_storage_path.clone()
     }
 
-    // Update get_file_path to use tokio
     pub async fn get_file_path(&self, user_id: Uuid, filename: &str) -> PathBuf {
         let user_dir = self.file_storage_path.join(user_id.to_string());
-        // Ensure directory exists
         let _ = tokio::fs::create_dir_all(&user_dir).await;
         user_dir.join(filename)
     }

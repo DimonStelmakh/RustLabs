@@ -96,7 +96,7 @@ impl TodoApp {
 
     fn add_task(&mut self, description: String) -> bool {
         if let Some(user_id) = &self.current_user {
-            let offset = FixedOffset::east_opt(2 * 3600).unwrap(); // UTC+2
+            let offset = FixedOffset::east_opt(2 * 3600).unwrap();
             let now = Utc::now().with_timezone(&offset);
 
             let task = Task {

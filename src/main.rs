@@ -13,7 +13,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv::dotenv().ok();
     env_logger::init();
 
-    // Get the executable's directory
     let exe_dir = env::current_exe()?
         .parent()
         .ok_or_else(|| Box::new(std::io::Error::new(
@@ -22,25 +21,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )))?
         .to_path_buf();
 
-    // Create storage path relative to the executable
     let mut storage_dir = exe_dir.join("storage").join("files");
 
-    // Print current directory and target directory for debugging
     println!("Current executable directory: {:?}", exe_dir);
     println!("Attempting to create storage at: {:?}", storage_dir);
 
-    // Create all parent directories
     match fs::create_dir_all(&storage_dir) {
         Ok(_) => println!("Successfully created storage directory at: {:?}", storage_dir),
         Err(e) => {
             println!("Error creating storage directory: {:?}", e);
             println!("Attempting to create in current directory instead...");
 
-            // Fallback to current directory if exe_dir fails
             let fallback_dir = PathBuf::from("storage/files");
             fs::create_dir_all(&fallback_dir)?;
             println!("Successfully created storage directory in current path: {:?}", fallback_dir);
-            // Use fallback_dir instead
             storage_dir = fallback_dir;
         }
     }

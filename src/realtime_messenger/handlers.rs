@@ -1,4 +1,3 @@
-use std::io::Read;
 use warp::{Filter, Rejection, Reply, filters::BoxedFilter};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
@@ -10,9 +9,7 @@ use super::{
     storage::Storage,
     websocket::WebSocketHandler
 };
-use tokio::{fs, io::AsyncWriteExt};  // Update this import
 use warp::Buf;
-use crate::realtime_messenger::storage::StorageError;
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
@@ -139,11 +136,9 @@ impl Handlers {
                 }
                 println!("Read {} bytes of file data", file_content.len());
 
-                // Save the file
                 match storage.save_file(user_id, filename.clone(), file_content).await {
                     Ok(file_path) => {
                         println!("File saved successfully at: {:?}", file_path);
-                        // Return a relative path instead of absolute
                         let relative_path = format!("/files/{}/{}", user_id, filename);
                         return Ok(warp::reply::json(&serde_json::json!({
                         "path": relative_path
@@ -162,7 +157,7 @@ impl Handlers {
 
     fn serve_files(&self) -> BoxedFilter<(impl Reply,)> {
         let storage_clone = self.storage.clone();
-        warp::path!("files" / ..)  // Match all paths under /files
+        warp::path!("files" / ..)
             .and(warp::fs::dir(storage_clone.get_base_path()))
             .boxed()
     }
@@ -318,7 +313,6 @@ impl Handlers {
             let user = user.clone();
             let handler = handler.clone();
             async move {
-                // Use as_ref() to get a reference to the WebSocketHandler
                 handler.as_ref().handle_connection(&user, socket).await
             }
         }))
