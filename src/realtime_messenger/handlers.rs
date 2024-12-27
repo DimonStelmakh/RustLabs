@@ -70,34 +70,53 @@ impl Handlers {
         }
     }
 
-    pub fn routes(&self) -> impl Filter<Extract = impl Reply, Error = Rejection> + Clone {
-        let api = self.auth_routes()
+    pub fn routes(&self) -> impl Filter<Extract = (Box<dyn Reply>,), Error = Rejection> + Clone {
+        let api = self
+            .auth_routes()
             .or(self.message_routes())
+            .or(self.user_routes()) // New
+            .or(self.auth_routes()) // New
             .or(self.ws_routes())
             .recover(Self::handle_rejection);
 
         warp::path("api")
             .and(api)
-            .with(warp::cors()
-                .allow_any_origin()
-                .allow_headers(vec!["content-type", "user-id"])
-                .allow_methods(vec!["GET", "POST", "PUT", "DELETE"]))
+            .with(
+                warp::cors()
+                    .allow_any_origin()
+                    .allow_headers(vec!["content-type", "user-id", "content-length"])
+                    .allow_methods(vec!["GET", "POST", "PUT", "DELETE"])
+                    .allow_credentials(true)
+                    .max_age(3600),
+            )
+            .map(|reply| Box::new(reply) as Box<dyn Reply>) // Ensure consistent output
     }
 
-    fn auth_routes(&self) -> BoxedFilter<(impl Reply,)> {
+
+    fn auth_routes(&self) -> BoxedFilter<(Box<dyn Reply>,)> {
         let login = warp::path!("auth" / "login")
             .and(warp::post())
             .and(warp::body::json())
             .and(with_auth(self.auth.clone()))
-            .and_then(Self::handle_login);
+            .and_then(Self::handle_login)
+            .map(|reply| Box::new(reply) as Box<dyn Reply>);
 
         let register = warp::path!("auth" / "register")
             .and(warp::post())
             .and(warp::body::json())
             .and(with_auth(self.auth.clone()))
-            .and_then(Self::handle_register);
+            .and_then(Self::handle_register)
+            .map(|reply| Box::new(reply) as Box<dyn Reply>);
 
-        login.or(register).boxed()
+        login.or(register).unify().boxed()
+    }
+
+    fn user_routes(&self) -> BoxedFilter<(Box<dyn Reply>,)> {
+        warp::path!("users")
+            .and(warp::get())
+            .and(with_storage(self.storage.clone()))
+            .and_then(Self::handle_get_users)
+            .boxed()
     }
 
     fn message_routes(&self) -> BoxedFilter<(impl Reply,)> {
@@ -139,6 +158,17 @@ impl Handlers {
             })),
             Err(e) => Err(warp::reject::custom(HandlerError::Auth(e))),
         }
+    }
+
+    async fn handle_get_users(
+        storage: Arc<Storage>,
+    ) -> Result<Box<dyn Reply>, Rejection> {
+        let users = storage.get_users().await
+            .map_err(|e| warp::reject::custom(HandlerError::Storage(e)))?;
+        println!("\n");
+        println!("users: {:?}", users);
+        println!("\n");
+        Ok(Box::new(warp::reply::json(&users)))
     }
 
     async fn handle_register(

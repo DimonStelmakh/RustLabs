@@ -127,9 +127,11 @@
             document.getElementById('auth').style.display = 'none';
             document.getElementById('chat').style.display = 'block';
 
-            await loadMessages(); // Initial message load
+            // Load users before messages and WebSocket connection
+            await loadUsers();
+            await loadMessages();
             connectWebSocket();
-            startMessagePolling(); // Start periodic updates
+            startMessagePolling();
         } catch (error) {
             document.getElementById('loginError').textContent = error.message;
         }
@@ -159,8 +161,12 @@
     }
 
     function startMessagePolling() {
-        loadMessages(); // Initial load
-        setInterval(loadMessages, 5000); // Refresh every 5 seconds
+        loadMessages();
+        loadUsers(); // Initial loads
+        setInterval(() => {
+            loadMessages();
+            loadUsers();
+        }, 5000); // Refresh every 5 seconds
     }
 
     function connectWebSocket() {
@@ -239,48 +245,54 @@
         });
     }
 
-    function displayMessage(data) {
-        console.log('Displaying message data:', data);
+    let users = new Map();
 
-        // If it's a WebSocketEvent::MessageReceived, extract the message
+    async function loadUsers() {
+        console.log("Loading users...");
+        try {
+            const response = await fetch('/api/users');
+            if (!response.ok) {
+                console.error('Failed to load users:', response.status, response.statusText);
+                throw new Error('Failed to load users');
+            }
+            const userList = await response.json();
+            console.log('Loaded users:', userList);
+            users.clear(); // Clear existing users
+            userList.forEach(user => users.set(user.id, user));
+            console.log('Updated users map:', Array.from(users.entries()));
+        } catch (error) {
+            console.error('Failed to load users:', error);
+        }
+    }
+
+    function displayMessage(data) {
         if (data.MessageReceived) {
-            console.log('WebSocket message received:', data.MessageReceived);
             data = data.MessageReceived;
         }
 
         const messagesDiv = document.getElementById('messages');
-        if (!messagesDiv) {
-            console.error('Messages div not found!');
-            return;
-        }
+        if (!messagesDiv) return;
 
-        try {
-            const messageDiv = document.createElement('div');
-            const isSent = data.sender_id === currentUserId;
-            messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
+        const messageDiv = document.createElement('div');
+        const isSent = data.sender_id === currentUserId;
+        messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
 
-            const time = new Date(data.created_at).toLocaleTimeString();
-            const direction = isSent ? 'To' : 'From';
-            const partnerId = isSent ? data.receiver_id : data.sender_id;
+        const time = new Date(data.created_at).toLocaleTimeString();
+        const sender = users.get(data.sender_id);
+        const receiver = users.get(data.receiver_id);
 
-            console.log('Creating message element:', {
-                isSent,
-                time,
-                direction,
-                partnerId,
-                content: data.content
-            });
+        console.log('Message display - Sender:', sender, 'Receiver:', receiver);
 
-            messageDiv.innerHTML = `
-            <small>${time} ${direction} ${partnerId.substring(0, 8)}...</small><br>
-            ${data.content}
-        `;
+        const senderName = sender ? sender.username : `Unknown (${data.sender_id})`;
+        const receiverName = receiver ? receiver.username : `Unknown (${data.receiver_id})`;
 
-            messagesDiv.appendChild(messageDiv);
-            messagesDiv.scrollTop = messagesDiv.scrollHeight;
-        } catch (error) {
-            console.error('Error displaying message:', error);
-        }
+        messageDiv.innerHTML = `
+        <small>${time} ${isSent ? 'To' : 'From'} ${isSent ? receiverName : senderName}</small><br>
+        ${data.content}
+    `;
+
+        messagesDiv.appendChild(messageDiv);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
     }
 
     async function loadMessages() {

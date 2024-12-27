@@ -105,6 +105,28 @@ impl Storage {
         Ok(messages)
     }
 
+    pub async fn get_users(&self) -> Result<Vec<User>, StorageError> {
+        let users = sqlx::query_as!(
+        User,
+        r#"
+        SELECT
+            id as "id!",
+            username as "username!",
+            email as "email!",
+            password_hash as "password_hash!",
+            created_at as "created_at!",
+            last_seen as "last_seen!"
+        FROM users
+        ORDER BY username
+        "#,
+    )
+            .fetch_all(&self.db_pool)
+            .await
+            .map_err(StorageError::Database)?;
+
+        Ok(users)
+    }
+
     pub async fn get_conversation_messages(
         &self,
         user_id: Uuid,
