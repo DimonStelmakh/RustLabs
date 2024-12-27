@@ -408,8 +408,28 @@
                     </a>
                 </div>
             `;
+            } else if (data.content_type.Voice) {
+                const voiceUrl = `/api${data.content}`;
+                contentHtml = `
+                <div class="message-voice">
+                    <audio controls src="${voiceUrl}"></audio>
+                    <span>(${formatDuration(data.content_type.Voice.duration)})</span>
+                </div>
+            `;
+            } else if (data.content_type.Video) {
+                const videoUrl = `/api${data.content}`;
+                contentHtml = `
+                <div class="message-video">
+                    <video controls src="${videoUrl}"></video>
+                    <span>(${formatDuration(data.content_type.Video.duration)})</span>
+                </div>
+            `;
             } else if (data.content_type.Text) {
                 contentHtml = `<div class="message-text">${data.content}</div>`;
+            } else {
+                // Fallback for unknown types
+                contentHtml = `<div class="message-text">${data.content}</div>`;
+                console.warn('Unknown message type:', data.content_type);
             }
         } else {
             // Fallback for text messages
@@ -417,9 +437,9 @@
         }
 
         messageDiv.innerHTML = `
-        <small>${time} ${isSent ? 'To' : 'From'} ${isSent ? receiverName : senderName}</small><br>
-        ${contentHtml}
-    `;
+            <small>${time} ${isSent ? 'To' : 'From'} ${isSent ? receiverName : senderName}</small><br>
+            ${contentHtml}
+        `;
 
         messagesDiv.appendChild(messageDiv);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
@@ -438,7 +458,7 @@
 
     function formatDuration(seconds) {
         const minutes = Math.floor(seconds / 60);
-        const remainingSeconds = seconds % 60;
+        const remainingSeconds = Math.floor(seconds % 60);
         return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
     }
 
