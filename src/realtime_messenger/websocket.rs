@@ -1,4 +1,4 @@
-use crate::realtime_messenger::models::{Message, User};
+use crate::realtime_messenger::models::{Message, User, MessageType};
 use futures::{FutureExt, StreamExt};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -19,6 +19,7 @@ pub enum WebSocketCommand {
     SendMessage {
         content: String,
         receiver_id: Uuid,
+        content_type: MessageType,  // Add this field
     },
     MarkAsRead {
         message_ids: Vec<Uuid>,
@@ -63,7 +64,7 @@ impl WebSocketHandler {
         ws: WebSocket,
     ) {
         let (ws_sender, mut ws_receiver) = ws.split();
-        let (tx, _rx) = mpsc::unbounded_channel();
+        let (tx, mut rx) = mpsc::unbounded_channel();
 
         self.users.write().await.insert(user.id, tx.clone());
 
@@ -88,7 +89,7 @@ impl WebSocketHandler {
 
     async fn handle_command(&self, sender_id: Uuid, command: WebSocketCommand) {
         match command {
-            WebSocketCommand::SendMessage { content, receiver_id } => {
+            WebSocketCommand::SendMessage { content, receiver_id, content_type } => {
                 println!("Processing message from {} to {}", sender_id, receiver_id);
 
                 let message = Message {
@@ -96,7 +97,7 @@ impl WebSocketHandler {
                     sender_id,
                     receiver_id,
                     content,
-                    content_type: crate::realtime_messenger::models::MessageType::Text,
+                    content_type,
                     created_at: chrono::Utc::now(),
                     read_at: None,
                 };
@@ -134,7 +135,7 @@ impl WebSocketHandler {
     async fn send_to_user(&self, user_id: Uuid, event: &WebSocketEvent) {
         if let Some(sender) = self.users.read().await.get(&user_id) {
             let event_json = serde_json::to_string(&event).unwrap();
-            println!("Sending WebSocket message to {}: {}", user_id, event_json);
+            println!("Sending WebSocket message to {}: {}", user_id, event_json); // Debug log
             let _ = sender.send(Ok(WsMessage::text(event_json)));
         } else {
             println!("User {} not connected to WebSocket", user_id);

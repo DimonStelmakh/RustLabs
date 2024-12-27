@@ -1,6 +1,8 @@
+use std::io::Read;
 use warp::{Filter, Rejection, Reply, filters::BoxedFilter};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use futures::{StreamExt, TryStreamExt};
 use uuid::Uuid;
 use super::{
     auth::Auth,
@@ -8,6 +10,9 @@ use super::{
     storage::Storage,
     websocket::WebSocketHandler
 };
+use tokio::{fs, io::AsyncWriteExt};  // Update this import
+use warp::Buf;
+use crate::realtime_messenger::storage::StorageError;
 
 #[derive(Deserialize)]
 pub struct LoginRequest {
@@ -70,26 +75,96 @@ impl Handlers {
         }
     }
 
-    pub fn routes(&self) -> impl Filter<Extract = (Box<dyn Reply>,), Error = Rejection> + Clone {
+    pub(crate) fn routes(&self) -> impl Filter<Extract = (Box<dyn Reply>,), Error = Rejection> + Clone {
         let api = self
             .auth_routes()
             .or(self.message_routes())
-            .or(self.user_routes()) // New
-            .or(self.auth_routes()) // New
+            .or(self.user_routes())
+            .or(self.file_routes())
+            .or(self.serve_files()) // This will now match /api/files/...
             .or(self.ws_routes())
             .recover(Self::handle_rejection);
 
         warp::path("api")
             .and(api)
-            .with(
-                warp::cors()
-                    .allow_any_origin()
-                    .allow_headers(vec!["content-type", "user-id", "content-length"])
-                    .allow_methods(vec!["GET", "POST", "PUT", "DELETE"])
-                    .allow_credentials(true)
-                    .max_age(3600),
-            )
-            .map(|reply| Box::new(reply) as Box<dyn Reply>) // Ensure consistent output
+            .with(warp::cors()
+                .allow_any_origin()
+                .allow_headers(vec!["content-type", "user-id", "content-length"])
+                .allow_methods(vec!["GET", "POST", "PUT", "DELETE"])
+                .allow_credentials(true)
+                .max_age(3600))
+            .map(|reply| Box::new(reply) as Box<dyn Reply>)
+    }
+
+    fn file_routes(&self) -> BoxedFilter<(impl Reply,)> {
+        let upload = warp::path("upload")
+            .and(warp::post())
+            .and(warp::multipart::form().max_length(50_000_000)) // 50MB limit
+            .and(warp::header("user-id"))
+            .and(with_storage(self.storage.clone()))
+            .and_then(Self::handle_file_upload);
+
+        upload.boxed()
+    }
+
+    async fn handle_file_upload(
+        mut form: warp::multipart::FormData,
+        user_id: String,
+        storage: Arc<Storage>,
+    ) -> Result<impl Reply, Rejection> {
+        let user_id = Uuid::parse_str(&user_id)
+            .map_err(|_| warp::reject::custom(HandlerError::InvalidInput("Invalid user ID".to_string())))?;
+        println!("Starting file upload for user: {}", user_id);
+
+        while let Some(Ok(part)) = form.next().await {
+            if part.name() == "file" {
+                let filename = part
+                    .filename()
+                    .ok_or_else(|| warp::reject::custom(HandlerError::InvalidInput("No filename".to_string())))?
+                    .to_string();
+                println!("Processing file: {}", filename);
+
+                // Read the entire file content
+                let mut file_content = Vec::new();
+                let mut stream = part.stream();
+                while let Some(chunk) = stream.next().await {
+                    let mut chunk = chunk.map_err(|e| {
+                        println!("Error reading chunk: {}", e);
+                        warp::reject::custom(HandlerError::InvalidInput(e.to_string()))
+                    })?;
+
+                    // Convert the chunk to bytes and extend the vector
+                    let chunk_bytes = chunk.copy_to_bytes(chunk.remaining());
+                    file_content.extend_from_slice(&chunk_bytes[..]);
+                }
+                println!("Read {} bytes of file data", file_content.len());
+
+                // Save the file
+                match storage.save_file(user_id, filename.clone(), file_content).await {
+                    Ok(file_path) => {
+                        println!("File saved successfully at: {:?}", file_path);
+                        // Return a relative path instead of absolute
+                        let relative_path = format!("/files/{}/{}", user_id, filename);
+                        return Ok(warp::reply::json(&serde_json::json!({
+                        "path": relative_path
+                    })));
+                    }
+                    Err(e) => {
+                        println!("Error saving file: {:?}", e);
+                        return Err(warp::reject::custom(HandlerError::Storage(e)));
+                    }
+                }
+            }
+        }
+
+        Err(warp::reject::custom(HandlerError::InvalidInput("No file found".to_string())))
+    }
+
+    fn serve_files(&self) -> BoxedFilter<(impl Reply,)> {
+        let storage_clone = self.storage.clone();
+        warp::path!("files" / ..)  // Match all paths under /files
+            .and(warp::fs::dir(storage_clone.get_base_path()))
+            .boxed()
     }
 
 
@@ -238,9 +313,14 @@ impl Handlers {
 
         let user = Arc::new(user);
         let handler = handler.clone();
+
         Ok(ws.on_upgrade(move |socket| {
             let user = user.clone();
-            async move { handler.handle_connection(&user, socket).await }
+            let handler = handler.clone();
+            async move {
+                // Use as_ref() to get a reference to the WebSocketHandler
+                handler.as_ref().handle_connection(&user, socket).await
+            }
         }))
     }
 

@@ -30,6 +30,13 @@ pub struct DbMessage {
 
 impl Storage {
     pub fn new(db_pool: PgPool, file_storage_path: PathBuf) -> Self {
+        // Ensure the base storage directory exists
+        if let Err(e) = std::fs::create_dir_all(&file_storage_path) {
+            println!("Warning: Could not create storage directory at {:?}: {}", file_storage_path, e);
+        }
+
+        println!("Initialized storage with path: {:?}", file_storage_path);
+
         Self {
             db_pool,
             file_storage_path,
@@ -185,14 +192,38 @@ impl Storage {
         data: Vec<u8>,
     ) -> Result<PathBuf, StorageError> {
         let user_dir = self.file_storage_path.join(user_id.to_string());
-        std::fs::create_dir_all(&user_dir)
-            .map_err(StorageError::FileSystem)?;
+        println!("Creating user directory at: {:?}", user_dir);
+
+        // Create user directory
+        tokio::fs::create_dir_all(&user_dir).await.map_err(|e| {
+            println!("Failed to create user directory: {}", e);
+            StorageError::FileSystem(e)
+        })?;
 
         let file_path = user_dir.join(&filename);
-        std::fs::write(&file_path, data)
-            .map_err(StorageError::FileSystem)?;
+        println!("Writing file to: {:?}", file_path);
 
+        // Write file using tokio's async file operations
+        tokio::fs::write(&file_path, data).await.map_err(|e| {
+            println!("Failed to write file: {}", e);
+            StorageError::FileSystem(e)
+        })?;
+
+        println!("Successfully wrote file at: {:?}", file_path);
         Ok(file_path)
+    }
+
+    // Add this method to get base storage path
+    pub fn get_base_path(&self) -> PathBuf {
+        self.file_storage_path.clone()
+    }
+
+    // Update get_file_path to use tokio
+    pub async fn get_file_path(&self, user_id: Uuid, filename: &str) -> PathBuf {
+        let user_dir = self.file_storage_path.join(user_id.to_string());
+        // Ensure directory exists
+        let _ = tokio::fs::create_dir_all(&user_dir).await;
+        user_dir.join(filename)
     }
 
     pub async fn mark_messages_as_read(

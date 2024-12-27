@@ -68,6 +68,38 @@
             border: 1px solid #ccc;
             border-radius: 3px;
         }
+        .message-input-container {
+            margin: 10px 0;
+        }
+
+        .message-attachments {
+            margin-top: 10px;
+            display: flex;
+            gap: 10px;
+        }
+
+        .attachment-btn {
+            padding: 5px 10px;
+            background: #f0f0f0;
+            border: 1px solid #ccc;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+
+        .attachment-btn:hover {
+            background: #e0e0e0;
+        }
+
+        .message.file-message {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .message.voice-message audio,
+        .message.video-message video {
+            max-width: 300px;
+        }
 
     </style>
 </head>
@@ -108,7 +140,36 @@
         <select id="receiverId" class="user-select">
             <option value="">Select user to message...</option>
         </select>
-        <input type="text" id="messageContent" placeholder="Type your message...">
+
+        <div class="message-input-container">
+            <input type="text" id="messageContent" placeholder="Type your message...">
+
+            <div class="message-attachments">
+                <!-- File upload -->
+                <label class="attachment-btn">
+                    <input type="file" id="fileInput" accept="*/*" style="display: none" />
+                    Upload a file
+                </label>
+
+                <!-- Voice recording -->
+                <button id="voiceRecordBtn" class="attachment-btn">
+                    Record a voice
+                </button>
+
+                <!-- Video recording -->
+                <button id="videoRecordBtn" class="attachment-btn">
+                    Record a video
+                </button>
+            </div>
+
+            <!-- Recording preview -->
+            <div id="recordingPreview" style="display: none">
+                <video id="videoPreview" style="display: none" width="200"></video>
+                <audio id="audioPreview" style="display: none"></audio>
+                <button id="stopRecordingBtn" style="display: none">Stop Recording</button>
+            </div>
+        </div>
+
         <button onclick="sendMessage()">Send</button>
     </div>
 </div>
@@ -215,50 +276,62 @@
         };
     }
 
+    function sendTextMessage(content, receiverId) {
+        const message = {
+            SendMessage: {
+                content: content,
+                receiver_id: receiverId,
+                content_type: { Text: null }
+            }
+        };
+        ws.send(JSON.stringify(message));
+        document.getElementById('messageContent').value = '';
+    }
+
+    function sendFileMessage(filename, path, size) {
+        const message = {
+            SendMessage: {
+                content: path,
+                receiver_id: document.getElementById('receiverId').value,
+                content_type: { File: { filename, size } }
+            }
+        };
+        ws.send(JSON.stringify(message));
+    }
+
+    function sendVoiceMessage(path, duration) {
+        const message = {
+            SendMessage: {
+                content: path,
+                receiver_id: document.getElementById('receiverId').value,
+                content_type: { Voice: { duration } }
+            }
+        };
+        ws.send(JSON.stringify(message));
+    }
+
+    function sendVideoMessage(path, duration) {
+        const message = {
+            SendMessage: {
+                content: path,
+                receiver_id: document.getElementById('receiverId').value,
+                content_type: { Video: { duration } }
+            }
+        };
+        ws.send(JSON.stringify(message));
+    }
+
     function sendMessage() {
-        if (!ws || ws.readyState !== WebSocket.OPEN) {
-            alert('WebSocket is not connected');
+        const receiverId = document.getElementById('receiverId').value;
+        if (!receiverId) {
+            alert('Please select a recipient');
             return;
         }
 
         const content = document.getElementById('messageContent').value;
-        const receiverId = document.getElementById('receiverId').value;
-
-        if (!content) {
-            alert('Please enter a message');
-            return;
+        if (content) {
+            sendTextMessage(content, receiverId);
         }
-
-        if (!receiverId) {
-            alert('Please select a user to message');
-            return;
-        }
-
-        console.log('Sending message:', {
-            content,
-            receiverId,
-            currentUserId
-        });
-
-        const message = {
-            SendMessage: {
-                content: content,
-                receiver_id: receiverId
-            }
-        };
-
-        console.log('WebSocket message:', JSON.stringify(message));
-        ws.send(JSON.stringify(message));
-        document.getElementById('messageContent').value = '';
-
-        // Display sent message immediately
-        displayMessage({
-            id: 'temp-' + Date.now(),
-            content: content,
-            sender_id: currentUserId,
-            receiver_id: receiverId,
-            created_at: new Date().toISOString()
-        });
     }
 
     let users = new Map();
@@ -318,18 +391,55 @@
         const sender = users.get(data.sender_id);
         const receiver = users.get(data.receiver_id);
 
-        console.log('Message display - Sender:', sender, 'Receiver:', receiver);
+        console.log('Message data:', data); // Debug log
 
         const senderName = sender ? sender.username : `Unknown (${data.sender_id})`;
         const receiverName = receiver ? receiver.username : `Unknown (${data.receiver_id})`;
 
+        let contentHtml = '';
+        if (typeof data.content_type === 'object') {
+            if (data.content_type.File) {
+                const fileInfo = data.content_type.File;
+                const fileUrl = `/api${data.content}`;
+                contentHtml = `
+                <div class="message-file">
+                    <a href="${fileUrl}" target="_blank">
+                        Attached file: ${fileInfo.filename} (${formatSize(fileInfo.size)})
+                    </a>
+                </div>
+            `;
+            } else if (data.content_type.Text) {
+                contentHtml = `<div class="message-text">${data.content}</div>`;
+            }
+        } else {
+            // Fallback for text messages
+            contentHtml = `<div class="message-text">${data.content}</div>`;
+        }
+
         messageDiv.innerHTML = `
         <small>${time} ${isSent ? 'To' : 'From'} ${isSent ? receiverName : senderName}</small><br>
-        ${data.content}
+        ${contentHtml}
     `;
 
         messagesDiv.appendChild(messageDiv);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function formatSize(bytes) {
+        const units = ['B', 'KB', 'MB', 'GB'];
+        let size = bytes;
+        let unit = 0;
+        while (size >= 1024 && unit < units.length - 1) {
+            size /= 1024;
+            unit++;
+        }
+        return `${Math.round(size * 10) / 10}${units[unit]}`;
+    }
+
+    function formatDuration(seconds) {
+        const minutes = Math.floor(seconds / 60);
+        const remainingSeconds = seconds % 60;
+        return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
     }
 
     async function loadMessages() {
@@ -376,6 +486,149 @@
             login();
         }
     });
+
+    let mediaRecorder = null;
+    let recordedChunks = [];
+
+    // File handling
+    document.getElementById('fileInput').addEventListener('change', function(e) {
+        const file = e.target.files[0];
+        if (file) {
+            handleFileUpload(file);
+        }
+    });
+
+    async function handleFileUpload(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        try {
+            console.log('Starting file upload for user:', currentUserId);
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                headers: {
+                    'user-id': currentUserId
+                },
+                body: formData
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Upload failed: ${errorText}`);
+            }
+
+            const data = await response.json();
+            console.log('Upload response:', data);
+
+            // Send WebSocket message with file info
+            const message = {
+                SendMessage: {
+                    content: data.path,
+                    receiver_id: document.getElementById('receiverId').value,
+                    content_type: {
+                        File: {
+                            filename: file.name,
+                            size: file.size
+                        }
+                    }
+                }
+            };
+
+            console.log('Sending WebSocket message:', message);
+            ws.send(JSON.stringify(message));
+
+        } catch (error) {
+            console.error('Upload error:', error);
+            alert('Failed to upload file: ' + error.message);
+        }
+    }
+
+    // Voice recording
+    document.getElementById('voiceRecordBtn').addEventListener('click', function() {
+        startRecording('audio');
+    });
+
+    // Video recording
+    document.getElementById('videoRecordBtn').addEventListener('click', function() {
+        startRecording('video');
+    });
+
+    async function startRecording(mediaType) {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: true,
+                video: mediaType === 'video'
+            });
+
+            recordedChunks = [];
+            mediaRecorder = new MediaRecorder(stream);
+
+            if (mediaType === 'video') {
+                const videoPreview = document.getElementById('videoPreview');
+                videoPreview.srcObject = stream;
+                videoPreview.style.display = 'block';
+                videoPreview.play();
+            }
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) {
+                    recordedChunks.push(e.data);
+                }
+            };
+
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(recordedChunks, {
+                    type: mediaType === 'video' ? 'video/webm' : 'audio/webm'
+                });
+                handleRecordingUpload(blob, mediaType);
+            };
+
+            document.getElementById('stopRecordingBtn').style.display = 'block';
+            document.getElementById('recordingPreview').style.display = 'block';
+            mediaRecorder.start();
+        } catch (error) {
+            console.error('Recording error:', error);
+            alert(`Failed to start ${mediaType} recording`);
+        }
+    }
+
+    document.getElementById('stopRecordingBtn').addEventListener('click', function() {
+        if (mediaRecorder && mediaRecorder.state === 'recording') {
+            mediaRecorder.stop();
+            mediaRecorder.stream.getTracks().forEach(track => track.stop());
+
+            document.getElementById('stopRecordingBtn').style.display = 'none';
+            document.getElementById('videoPreview').style.display = 'none';
+            document.getElementById('recordingPreview').style.display = 'none';
+        }
+    });
+
+    async function handleRecordingUpload(blob, mediaType) {
+        const formData = new FormData();
+        formData.append('file', blob, `${mediaType}-${Date.now()}.webm`);
+
+        try {
+            const response = await fetch('/api/upload', {
+                method: 'POST',
+                headers: {
+                    'user-id': currentUserId
+                },
+                body: formData
+            });
+
+            if (!response.ok) throw new Error('Upload failed');
+
+            const data = await response.json();
+            if (mediaType === 'audio') {
+                sendVoiceMessage(data.path, Math.round(blob.size / 1024));
+            } else {
+                sendVideoMessage(data.path, Math.round(blob.size / 1024));
+            }
+        } catch (error) {
+            console.error('Upload error:', error);
+            alert('Failed to upload recording');
+        }
+    }
 </script>
 </body>
 </html>
