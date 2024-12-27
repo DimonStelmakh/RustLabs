@@ -78,7 +78,7 @@ impl Handlers {
             .or(self.message_routes())
             .or(self.user_routes())
             .or(self.file_routes())
-            .or(self.serve_files()) // This will now match /api/files/...
+            .or(self.serve_files())
             .or(self.ws_routes())
             .recover(Self::handle_rejection);
 
@@ -96,7 +96,7 @@ impl Handlers {
     fn file_routes(&self) -> BoxedFilter<(impl Reply,)> {
         let upload = warp::path("upload")
             .and(warp::post())
-            .and(warp::multipart::form().max_length(50_000_000)) // 50MB limit
+            .and(warp::multipart::form().max_length(50_000_000))
             .and(warp::header("user-id"))
             .and(with_storage(self.storage.clone()))
             .and_then(Self::handle_file_upload);
@@ -121,7 +121,6 @@ impl Handlers {
                     .to_string();
                 println!("Processing file: {}", filename);
 
-                // Read the entire file content
                 let mut file_content = Vec::new();
                 let mut stream = part.stream();
                 while let Some(chunk) = stream.next().await {
@@ -130,7 +129,6 @@ impl Handlers {
                         warp::reject::custom(HandlerError::InvalidInput(e.to_string()))
                     })?;
 
-                    // Convert the chunk to bytes and extend the vector
                     let chunk_bytes = chunk.copy_to_bytes(chunk.remaining());
                     file_content.extend_from_slice(&chunk_bytes[..]);
                 }
