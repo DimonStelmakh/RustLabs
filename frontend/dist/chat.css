@@ -1,0 +1,275 @@
+:root {
+    --primary-color: #2196F3;
+    --primary-dark: #1976D2;
+    --success-color: #4CAF50;
+    --success-dark: #388E3C;
+    --gray-100: #f8f9fa;
+    --gray-200: #e9ecef;
+    --gray-300: #dee2e6;
+    --gray-400: #ced4da;
+    --gray-500: #adb5bd;
+    --gray-600: #6c757d;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.12);
+    --shadow-md: 0 4px 6px rgba(0,0,0,0.1);
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+    line-height: 1.6;
+    color: #333;
+    background-color: #f5f7fa;
+}
+
+.auth-container, .chat-container {
+    max-width: 1000px;
+    margin: 2rem auto;
+    padding: 2rem;
+    background: white;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-md);
+}
+
+input[type="text"],
+input[type="email"],
+input[type="password"],
+.user-select {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    margin: 0.5rem 0;
+    border: 1.5px solid var(--gray-300);
+    border-radius: var(--radius-sm);
+    font-size: 1rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+.user-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
+}
+
+button {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 1rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+button.primary {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+button.primary:hover {
+    background-color: var(--primary-dark);
+}
+
+button.secondary {
+    background-color: var(--gray-200);
+    color: var(--gray-600);
+}
+
+button.secondary:hover {
+    background-color: var(--gray-300);
+}
+
+.attachment-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    min-width: 120px;
+    white-space: nowrap;
+    background-color: var(--gray-100);
+    border: 1px solid var(--gray-300);
+    border-radius: var(--radius-sm);
+    color: var(--gray-600);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: all 0.2s;
+    gap: 0.5rem;
+}
+
+.attachment-btn:hover {
+    background-color: var(--gray-200);
+}
+
+.attachment-btn svg {
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+}
+
+#messages {
+    height: 500px;
+    padding: 1rem;
+    margin: 1rem 0;
+    background: var(--gray-100);
+    border-radius: var(--radius-md);
+    overflow-y: auto;
+}
+
+.message {
+    max-width: 70%;
+    margin: 0.5rem 0;
+    padding: 0.75rem;
+    border-radius: var(--radius-md);
+    position: relative;
+}
+
+.message small {
+    display: block;
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+    opacity: 0.9;
+    color: inherit;
+}
+
+.message.sent {
+    margin-left: auto;
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.message.received {
+    margin-right: auto;
+    background-color: white;
+    box-shadow: var(--shadow-sm);
+}
+
+.message-voice,
+.message-video {
+    width: 250px;
+    margin: 0.25rem 0;
+}
+
+
+.message-voice audio,
+.message-video video {
+    width: 100%;
+    border-radius: var(--radius-sm);
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.message-voice span,
+.message-video span {
+    display: block;
+    font-size: 0.8rem;
+    margin-top: 0.25rem;
+    opacity: 0.8;
+}
+
+.message-file {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.message-file a {
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+    color: inherit;
+    gap: 0.5rem;
+}
+
+.message.sent .message-file a {
+    color: white;
+}
+
+.status {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 1rem;
+    font-size: 0.875rem;
+    margin: 0.5rem 0;
+}
+
+#connectionStatus {
+    color: var(--gray-600);
+}
+
+#connectionStatus.connected {
+    color: var(--success-color);
+}
+
+#connectionStatus.disconnected {
+    color: #dc3545;
+}
+
+.message-input-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin: 1rem 0;
+    padding: 1rem;
+    background-color: white;
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+}
+
+.message-attachments {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 0.75rem;
+    flex-wrap: nowrap;
+}
+
+.message-text {
+    font-size: 1rem;
+    line-height: 1.4;
+    margin: 0;
+}
+
+#recordingPreview {
+    margin: 1rem 0;
+    padding: 1rem;
+    background-color: var(--gray-100);
+    border-radius: var(--radius-md);
+}
+
+.error {
+    color: #dc3545;
+    font-size: 0.875rem;
+    margin: 0.5rem 0;
+}
+
+@media (max-width: 768px) {
+    .auth-container,
+    .chat-container {
+        margin: 1rem;
+        padding: 1rem;
+    }
+
+    .message {
+        max-width: 85%;
+    }
+
+    .message-voice,
+    .message-video {
+        width: 250px;
+    }
+
+    .message-input-container {
+        flex-direction: column;
+    }
+
+    .message-attachments {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+    }
+
+    .attachment-btn {
+        min-width: 100px;
+        flex: 1 1 auto;
+    }
+}
