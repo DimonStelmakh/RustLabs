@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Real-time Chat</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .auth-container, .chat-container {
+            border: 1px solid #ccc;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 5px;
+        }
+        #messages {
+            height: 300px;
+            overflow-y: auto;
+            border: 1px solid #eee;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        .message {
+            margin: 5px 0;
+            padding: 5px;
+            border-radius: 3px;
+        }
+        .sent {
+            background: #e3f2fd;
+            margin-left: 20%;
+        }
+        .received {
+            background: #f5f5f5;
+            margin-right: 20%;
+        }
+        input[type="text"], input[type="email"], input[type="password"] {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 8px 15px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #45a049;
+        }
+        .error {
+            color: red;
+            margin: 5px 0;
+        }
+        .status {
+            color: #666;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+<div id="auth" class="auth-container">
+    <h2>Authentication</h2>
+    <div id="loginForm">
+        <h3>Login</h3>
+        <input type="email" id="loginEmail" placeholder="Email" required>
+        <input type="password" id="loginPassword" placeholder="Password" required>
+        <button onclick="login()">Login</button>
+        <div class="error" id="loginError"></div>
+    </div>
+    <div id="registerForm">
+        <h3>Register</h3>
+        <input type="text" id="regUsername" placeholder="Username" required>
+        <input type="email" id="regEmail" placeholder="Email" required>
+        <input type="password" id="regPassword" placeholder="Password" required>
+        <button onclick="register()">Register</button>
+        <div class="error" id="registerError"></div>
+    </div>
+</div>
+
+<div id="chat" class="chat-container" style="display:none;">
+    <h2>Chat</h2>
+    <div class="status" id="connectionStatus">Disconnected</div>
+
+    <div id="messages" style="
+        height: 300px;
+        overflow-y: auto;
+        border: 1px solid #ccc;
+        padding: 10px;
+        margin: 10px 0;
+        background: #f8f9fa;
+    "></div>
+
+    <div id="messageForm">
+        <input type="text" id="receiverId" placeholder="Receiver UUID">
+        <input type="text" id="messageContent" placeholder="Type your message...">
+        <button onclick="sendMessage()">Send</button>
+    </div>
+</div>
+
+<script>
+    let ws = null;
+    let currentUserId = null;
+
+    async function login() {
+        const email = document.getElementById('loginEmail').value;
+        const password = document.getElementById('loginPassword').value;
+
+        try {
+            const response = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, password })
+            });
+
+            if (!response.ok) {
+                throw new Error('Login failed');
+            }
+
+            const data = await response.json();
+            currentUserId = data.user_id;
+            document.getElementById('loginError').textContent = '';
+            document.getElementById('auth').style.display = 'none';
+            document.getElementById('chat').style.display = 'block';
+
+            await loadMessages(); // Initial message load
+            connectWebSocket();
+            startMessagePolling(); // Start periodic updates
+        } catch (error) {
+            document.getElementById('loginError').textContent = error.message;
+        }
+    }
+
+    async function register() {
+        const username = document.getElementById('regUsername').value;
+        const email = document.getElementById('regEmail').value;
+        const password = document.getElementById('regPassword').value;
+
+        try {
+            const response = await fetch('/api/auth/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, email, password })
+            });
+
+            if (!response.ok) {
+                throw new Error('Registration failed');
+            }
+
+            const data = await response.json();
+            document.getElementById('registerError').textContent = 'Registration successful! You can now login.';
+        } catch (error) {
+            document.getElementById('registerError').textContent = error.message;
+        }
+    }
+
+    function startMessagePolling() {
+        loadMessages(); // Initial load
+        setInterval(loadMessages, 5000); // Refresh every 5 seconds
+    }
+
+    function connectWebSocket() {
+        console.log('Connecting WebSocket with user ID:', currentUserId);
+        ws = new WebSocket(`ws://${window.location.host}/api/ws?user-id=${currentUserId}`);
+        const statusElement = document.getElementById('connectionStatus');
+
+        ws.onopen = () => {
+            console.log('WebSocket connected');
+            statusElement.textContent = 'Connected';
+            statusElement.style.color = 'green';
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket disconnected');
+            statusElement.textContent = 'Disconnected';
+            statusElement.style.color = 'red';
+            setTimeout(connectWebSocket, 5000);
+        };
+
+        ws.onmessage = (event) => {
+            console.log('WebSocket message received:', event.data);
+            try {
+                const data = JSON.parse(event.data);
+                displayMessage(data);
+            } catch (error) {
+                console.error('Error processing WebSocket message:', error);
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            statusElement.textContent = 'Connection error';
+            statusElement.style.color = 'red';
+        };
+    }
+
+    function sendMessage() {
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
+            alert('WebSocket is not connected');
+            return;
+        }
+
+        const content = document.getElementById('messageContent').value;
+        const receiverId = document.getElementById('receiverId').value;
+
+        if (!content || !receiverId) {
+            alert('Please enter both message and receiver ID');
+            return;
+        }
+
+        console.log('Sending message:', {
+            content,
+            receiverId,
+            currentUserId
+        });
+
+        const message = {
+            SendMessage: {
+                content: content,
+                receiver_id: receiverId
+            }
+        };
+
+        console.log('WebSocket message:', JSON.stringify(message));
+        ws.send(JSON.stringify(message));
+        document.getElementById('messageContent').value = '';
+
+        // Display sent message immediately
+        displayMessage({
+            id: 'temp-' + Date.now(),
+            content: content,
+            sender_id: currentUserId,
+            receiver_id: receiverId,
+            created_at: new Date().toISOString()
+        });
+    }
+
+    function displayMessage(data) {
+        console.log('Displaying message data:', data);
+
+        // If it's a WebSocketEvent::MessageReceived, extract the message
+        if (data.MessageReceived) {
+            console.log('WebSocket message received:', data.MessageReceived);
+            data = data.MessageReceived;
+        }
+
+        const messagesDiv = document.getElementById('messages');
+        if (!messagesDiv) {
+            console.error('Messages div not found!');
+            return;
+        }
+
+        try {
+            const messageDiv = document.createElement('div');
+            const isSent = data.sender_id === currentUserId;
+            messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
+
+            const time = new Date(data.created_at).toLocaleTimeString();
+            const direction = isSent ? 'To' : 'From';
+            const partnerId = isSent ? data.receiver_id : data.sender_id;
+
+            console.log('Creating message element:', {
+                isSent,
+                time,
+                direction,
+                partnerId,
+                content: data.content
+            });
+
+            messageDiv.innerHTML = `
+            <small>${time} ${direction} ${partnerId.substring(0, 8)}...</small><br>
+            ${data.content}
+        `;
+
+            messagesDiv.appendChild(messageDiv);
+            messagesDiv.scrollTop = messagesDiv.scrollHeight;
+        } catch (error) {
+            console.error('Error displaying message:', error);
+        }
+    }
+
+    async function loadMessages() {
+        try {
+            console.log('Loading messages...');
+            const response = await fetch(`/api/messages?limit=50&offset=0`, {
+                headers: {
+                    'user-id': currentUserId
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to load messages');
+            }
+
+            const messages = await response.json();
+            console.log('Raw messages data:', messages); // Log raw data
+
+            const messagesDiv = document.getElementById('messages');
+            console.log('Messages div:', messagesDiv); // Verify the div exists
+            messagesDiv.innerHTML = '';
+
+            // Sort messages by timestamp
+            messages.sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
+
+            messages.forEach(message => {
+                console.log('Processing message:', message); // Log each message
+                displayMessage(message);
+            });
+        } catch (error) {
+            console.error('Failed to load messages:', error);
+        }
+    }
+
+    // Add enter key listeners
+    document.getElementById('messageContent').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            sendMessage();
+        }
+    });
+
+    document.getElementById('loginPassword').addEventListener('keypress', function(e) {
+        if (e.key === 'Enter') {
+            login();
+        }
+    });
+</script>
+</body>
+</html>
